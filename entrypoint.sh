@@ -94,7 +94,8 @@ cd ..
 
 # Push Python files
 execute_with_error_handling git clone https://${REPO_PACKAGE_TOKEN}@${PYTHON_REPO} python-repo
-execute_with_error_handling rm -rf python-repo/* execute_with_error_handling cp -R python_out/* python-repo/
+execute_with_error_handling rm -rf python-repo/* 
+execute_with_error_handling cp -R python_out/* python-repo/src
 cd python-repo
 execute_with_error_handling git config user.name github-actions
 execute_with_error_handling git config user.email github-actions@github.com
