@@ -9,7 +9,8 @@ RUN apk add --no-cache \
     grpc-plugins \
     nodejs \
     npm \
-    python3 
+    python3 \
+    py3-pip
 
 RUN pip install --no-cache-dir --break-system-packages grpcio grpcio-tools
 
