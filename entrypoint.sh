@@ -47,19 +47,19 @@ create_release() {
     fi
 }
 
-# Go
+# Go build proto
 execute_with_error_handling mkdir -p go_out
 execute_with_error_handling protoc \
     --plugin=protoc-gen-go=/root/go/bin/protoc-gen-go \
     --plugin=protoc-gen-go-grpc=/root/go/bin/protoc-gen-go-grpc \
     -I src --go_out=go_out --go_opt=paths=source_relative --go-grpc_out=go_out --go-grpc_opt=paths=source_relative src/*/*.proto
 
-# TypeScript
+# TypeScript build proto
 execute_with_error_handling mkdir -p ts_out
 execute_with_error_handling protoc --plugin=protoc-gen-ts=`which protoc-gen-ts` -I src --ts_out=ts_out src/*/*.proto
 
 
-# Python
+# Python build proto
 execute_with_error_handling mkdir -p python_out
 execute_with_error_handling python -m grpc_tools.protoc -I src --python_out=python_out --pyi_out=python_out --grpc_python_out=python_out src/*/*.proto
 
@@ -92,6 +92,7 @@ execute_with_error_handling git push origin main --tags
 create_release ${TS_REPO} ${PARENT_VERSION}
 cd ..
 
+# Push Python files
 execute_with_error_handling git clone https://${REPO_PACKAGE_TOKEN}@${PYTHON_REPO} python-repo
 execute_with_error_handling rm -rf python-repo/* execute_with_error_handling cp -R python_out/* python-repo/
 cd python-repo
