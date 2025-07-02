@@ -47,14 +47,21 @@ create_release() {
     fi
 }
 
-# Компиляция Proto файлов
+# Go
 execute_with_error_handling mkdir -p go_out
-execute_with_error_handling protoc -I src --go_out=go_out --go_opt=paths=source_relative --go-grpc_out=go_out --go-grpc_opt=paths=source_relative src/*/*.proto
+execute_with_error_handling protoc \
+    --plugin=protoc-gen-go=/root/go/bin/protoc-gen-go \
+    --plugin=protoc-gen-go-grpc=/root/go/bin/protoc-gen-go-grpc \
+    -I src --go_out=go_out --go_opt=paths=source_relative --go-grpc_out=go_out --go-grpc_opt=paths=source_relative src/*/*.proto
 
-if [ -z "$EXCLUDE_TS" ]; then
-    execute_with_error_handling mkdir -p ts_out
-    execute_with_error_handling protoc -I src --plugin=protoc-gen-ts=/usr/local/bin/protoc-gen-ts --ts_out=ts_out src/*/*.proto
-fi
+# TypeScript
+execute_with_error_handling mkdir -p ts_out
+execute_with_error_handling protoc --plugin=protoc-gen-ts=`which protoc-gen-ts` -I src --ts_out=ts_out src/*/*.proto
+
+
+# Python
+execute_with_error_handling mkdir -p python_out
+execute_with_error_handling python -m grpc_tools.protoc -I src --python_out=python_out --pyi_out=python_out --grpc_python_out=python_out src/*/*.proto
 
 # Push Go files
 execute_with_error_handling git clone https://${REPO_PACKAGE_TOKEN}@${GO_REPO} go-repo
@@ -71,18 +78,28 @@ create_release ${GO_REPO} ${PARENT_VERSION}
 cd ..
 
 # Push TypeScript files
-if [ -z "$EXCLUDE_TS" ]; then
-  execute_with_error_handling git clone https://${REPO_PACKAGE_TOKEN}@${TS_REPO} ts-repo
-  execute_with_error_handling rm -rf ts-repo/src/*
-  execute_with_error_handling cp -R ts_out/* ts-repo/src
-  cd ts-repo
-  execute_with_error_handling git config user.name github-actions
-  execute_with_error_handling git config user.email github-actions@github.com
-  execute_with_error_handling npm version ${PARENT_VERSION} --no-git-tag-version
-  execute_with_error_handling git add .
-  execute_with_error_handling git commit -m "Update from proto repo ${PARENT_VERSION}" --allow-empty
-  execute_with_error_handling git tag -a ${PARENT_VERSION} -m "Release ${PARENT_VERSION} (from proto ${PARENT_VERSION})"
-  execute_with_error_handling git push origin main --tags
-  create_release ${TS_REPO} ${PARENT_VERSION}
-  cd ..
-fi
+execute_with_error_handling git clone https://${REPO_PACKAGE_TOKEN}@${TS_REPO} ts-repo
+execute_with_error_handling rm -rf ts-repo/src/*
+execute_with_error_handling cp -R ts_out/* ts-repo/src
+cd ts-repo
+execute_with_error_handling git config user.name github-actions
+execute_with_error_handling git config user.email github-actions@github.com
+execute_with_error_handling npm version ${PARENT_VERSION} --no-git-tag-version
+execute_with_error_handling git add .
+execute_with_error_handling git commit -m "Update from proto repo ${PARENT_VERSION}" --allow-empty
+execute_with_error_handling git tag -a ${PARENT_VERSION} -m "Release ${PARENT_VERSION} (from proto ${PARENT_VERSION})"
+execute_with_error_handling git push origin main --tags
+create_release ${TS_REPO} ${PARENT_VERSION}
+cd ..
+
+execute_with_error_handling git clone https://${REPO_PACKAGE_TOKEN}@${PYTHON_REPO} python-repo
+execute_with_error_handling rm -rf python-repo/* execute_with_error_handling cp -R python_out/* python-repo/
+cd python-repo
+execute_with_error_handling git config user.name github-actions
+execute_with_error_handling git config user.email github-actions@github.com
+execute_with_error_handling git add .
+execute_with_error_handling git commit -m "Update from proto repo ${PARENT_VERSION}" --allow-empty
+execute_with_error_handling git tag -a ${PARENT_VERSION} -m "Release ${PARENT_VERSION} (from proto ${PARENT_VERSION})"
+execute_with_error_handling git push origin main --tags
+create_release ${PYTHON_REPO} ${PARENT_VERSION}
+cd ..
