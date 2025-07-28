@@ -1,13 +1,16 @@
 #!/bin/sh
 
+# Выход при любой ошибке
 set -e
 
+# Функция для выполнения команды с проверкой на ошибку
 execute_with_error_handling() {
     if ! "$@"; then
         exit 1
     fi
 }
 
+# Функция для создания релиза на GitHub
 create_release() {
     local repo_url=$1
     local version=$2
@@ -47,61 +50,87 @@ create_release() {
     fi
 }
 
-# Go build proto
-execute_with_error_handling mkdir -p go_out
-execute_with_error_handling protoc \
-    --plugin=protoc-gen-go=/root/go/bin/protoc-gen-go \
-    --plugin=protoc-gen-go-grpc=/root/go/bin/protoc-gen-go-grpc \
-    -I src --go_out=go_out --go_opt=paths=source_relative --go-grpc_out=go_out --go-grpc_opt=paths=source_relative src/*/*.proto
+# --- Go ---
+# Проверяем, задана ли переменная GO_REPO
+if [ -n "$GO_REPO" ]; then
+    echo "GO_REPO is set. Processing Go files..."
 
-# TypeScript build proto
-execute_with_error_handling mkdir -p ts_out
-execute_with_error_handling protoc --plugin=protoc-gen-ts=`which protoc-gen-ts` -I src --ts_out=ts_out src/*/*.proto
+    # Go build proto
+    execute_with_error_handling mkdir -p go_out
+    execute_with_error_handling protoc \
+        --plugin=protoc-gen-go=/root/go/bin/protoc-gen-go \
+        --plugin=protoc-gen-go-grpc=/root/go/bin/protoc-gen-go-grpc \
+        -I src --go_out=go_out --go_opt=paths=source_relative --go-grpc_out=go_out --go-grpc_opt=paths=source_relative src/*/*.proto
 
-# Python build proto
-execute_with_error_handling mkdir -p python_out
-execute_with_error_handling python -m grpc_tools.protoc -I src --python_out=python_out --pyi_out=python_out --grpc_python_out=python_out src/*/*.proto
+    # Push Go files
+    execute_with_error_handling git clone https://${REPO_PACKAGE_TOKEN}@${GO_REPO} go-repo
+    execute_with_error_handling cp -R go_out/* go-repo/
+    cd go-repo
+    execute_with_error_handling go mod tidy
+    execute_with_error_handling git config user.name github-actions
+    execute_with_error_handling git config user.email github-actions@github.com
+    execute_with_error_handling git add .
+    execute_with_error_handling git commit -m "Update from proto repo ${PARENT_VERSION}" --allow-empty
+    execute_with_error_handling git tag -a ${PARENT_VERSION} -m "Release ${PARENT_VERSION} (from proto ${PARENT_VERSION})"
+    execute_with_error_handling git push origin main --tags
+    create_release ${GO_REPO} ${PARENT_VERSION}
+    cd ..
+else
+    echo "GO_REPO is not set. Skipping Go processing."
+fi
 
-# Push Go files
-execute_with_error_handling git clone https://${REPO_PACKAGE_TOKEN}@${GO_REPO} go-repo
-execute_with_error_handling cp -R go_out/* go-repo/
-cd go-repo
-execute_with_error_handling go mod tidy
-execute_with_error_handling git config user.name github-actions
-execute_with_error_handling git config user.email github-actions@github.com
-execute_with_error_handling git add .
-execute_with_error_handling git commit -m "Update from proto repo ${PARENT_VERSION}" --allow-empty
-execute_with_error_handling git tag -a ${PARENT_VERSION} -m "Release ${PARENT_VERSION} (from proto ${PARENT_VERSION})"
-execute_with_error_handling git push origin main --tags
-create_release ${GO_REPO} ${PARENT_VERSION}
-cd ..
+# --- TypeScript ---
+# Проверяем, задана ли переменная TS_REPO
+if [ -n "$TS_REPO" ]; then
+    echo "TS_REPO is set. Processing TypeScript files..."
 
-# Push TypeScript files
-execute_with_error_handling git clone https://${REPO_PACKAGE_TOKEN}@${TS_REPO} ts-repo
+    # TypeScript build proto
+    execute_with_error_handling mkdir -p ts_out
+    execute_with_error_handling protoc --plugin=protoc-gen-ts=`which protoc-gen-ts` -I src --ts_out=ts_out src/*/*.proto
 
-execute_with_error_handling rm -rf ts-repo/src/*
-execute_with_error_handling cp -R ts_out/* ts-repo/src
-cd ts-repo
-execute_with_error_handling git config user.name github-actions
-execute_with_error_handling git config user.email github-actions@github.com
-execute_with_error_handling npm version ${PARENT_VERSION} --no-git-tag-version
-execute_with_error_handling git add .
-execute_with_error_handling git commit -m "Update from proto repo ${PARENT_VERSION}" --allow-empty
-execute_with_error_handling git tag -a ${PARENT_VERSION} -m "Release ${PARENT_VERSION} (from proto ${PARENT_VERSION})"
-execute_with_error_handling git push origin main --tags
-create_release ${TS_REPO} ${PARENT_VERSION}
-cd ..
+    # Push TypeScript files
+    execute_with_error_handling git clone https://${REPO_PACKAGE_TOKEN}@${TS_REPO} ts-repo
 
-# Push Python files
-execute_with_error_handling git clone https://${REPO_PACKAGE_TOKEN}@${PYTHON_REPO} python-repo
-execute_with_error_handling find python-repo/src -mindepth 1 -not -name '__init__.py' -exec rm -rf {} +
-execute_with_error_handling cp -R python_out/* python-repo/src
-cd python-repo
-execute_with_error_handling git config user.name github-actions
-execute_with_error_handling git config user.email github-actions@github.com
-execute_with_error_handling git add .
-execute_with_error_handling git commit -m "Update from proto repo ${PARENT_VERSION}" --allow-empty
-execute_with_error_handling git tag -a ${PARENT_VERSION} -m "Release ${PARENT_VERSION} (from proto ${PARENT_VERSION})"
-execute_with_error_handling git push origin main --tags
-create_release ${PYTHON_REPO} ${PARENT_VERSION}
-cd ..
+    execute_with_error_handling rm -rf ts-repo/src/*
+    execute_with_error_handling cp -R ts_out/* ts-repo/src
+    cd ts-repo
+    execute_with_error_handling git config user.name github-actions
+    execute_with_error_handling git config user.email github-actions@github.com
+    execute_with_error_handling npm version ${PARENT_VERSION} --no-git-tag-version
+    execute_with_error_handling git add .
+    execute_with_error_handling git commit -m "Update from proto repo ${PARENT_VERSION}" --allow-empty
+    execute_with_error_handling git tag -a ${PARENT_VERSION} -m "Release ${PARENT_VERSION} (from proto ${PARENT_VERSION})"
+    execute_with_error_handling git push origin main --tags
+    create_release ${TS_REPO} ${PARENT_VERSION}
+    cd ..
+else
+    echo "TS_REPO is not set. Skipping TypeScript processing."
+fi
+
+# --- Python ---
+# Проверяем, задана ли переменная PYTHON_REPO
+if [ -n "$PYTHON_REPO" ]; then
+    echo "PYTHON_REPO is set. Processing Python files..."
+
+    # Python build proto
+    execute_with_error_handling mkdir -p python_out
+    execute_with_error_handling python -m grpc_tools.protoc -I src --python_out=python_out --pyi_out=python_out --grpc_python_out=python_out src/*/*.proto
+
+    # Push Python files
+    execute_with_error_handling git clone https://${REPO_PACKAGE_TOKEN}@${PYTHON_REPO} python-repo
+    execute_with_error_handling find python-repo/src -mindepth 1 -not -name '__init__.py' -exec rm -rf {} +
+    execute_with_error_handling cp -R python_out/* python-repo/src
+    cd python-repo
+    execute_with_error_handling git config user.name github-actions
+    execute_with_error_handling git config user.email github-actions@github.com
+    execute_with_error_handling git add .
+    execute_with_error_handling git commit -m "Update from proto repo ${PARENT_VERSION}" --allow-empty
+    execute_with_error_handling git tag -a ${PARENT_VERSION} -m "Release ${PARENT_VERSION} (from proto ${PARENT_VERSION})"
+    execute_with_error_handling git push origin main --tags
+    create_release ${PYTHON_REPO} ${PARENT_VERSION}
+    cd ..
+else
+    echo "PYTHON_REPO is not set. Skipping Python processing."
+fi
+
+echo "Script finished successfully."
